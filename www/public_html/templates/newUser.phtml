@@ -1,0 +1,11 @@
+<form method="POST">
+    <div><label for="user[name]">Name:</label><input type="text" name="user[name]" value="{{ user['name']|striptags }}"></div>
+    {% if errors['name'] is not empty %}
+    <div>{{errors['name']}}</div>
+    {% endif %}
+    <div><label for="user[email]">Email:</label><input type="text" name="user[email]" value="{{ user['email']|striptags }}" required></div>
+    {% if errors['email'] is not empty %}
+    <div>{{errors['email']}}</div>
+    {% endif %}
+    <input type="submit" value="Add user">
+</form>

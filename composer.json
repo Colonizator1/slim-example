@@ -1,0 +1,30 @@
+{
+    "name": "colonizator/exampleslim",
+    "description": "example site on slim",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Artur Kruchok",
+            "email": "art8573669@gmail.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Example\\": "www/public_html"
+        },
+        "files": [
+            "www/public_html/validator.php",
+            "www/public_html/form.php"
+        ]
+    },
+    "require": {
+        "slim/slim": "^4.5",
+        "slim/psr7": "^1.0",
+        "slim/http": "^1.0",
+        "slim/php-view": "^2.2",
+        "php-di/php-di": "^6.1",
+        "symfony/form": "^5.0",
+        "slim/twig-view": "^3.0"
+    }
+}
