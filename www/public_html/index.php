@@ -13,21 +13,31 @@ use function Example\Validator\validate;
 use function Example\Form\parse;
 use function Example\Form\write;
 
+session_start();
+// Create Container
 $container = new Container();
 AppFactory::setContainer($container);
-$container->set('renderer', function () {
-    // Параметром передается базовая директория в которой будут храниться шаблоны
-    //return new \Slim\Views\PhpRenderer(__DIR__ . '/templates');
-    return Twig::create(__DIR__ . '/templates');
-});
 
+// Set view in Container
+$container->set('renderer', function () {
+    return Twig::create('templates', []);
+});
+$container->set('flash', function () {
+    return new \Slim\Flash\Messages();
+});
+// Create App
 $app = AppFactory::create();
-//$app->add(TwigMiddleware::createFromContainer($app));
+
+// Add Twig-View Middleware
+$app->add(TwigMiddleware::createFromContainer($app, 'renderer'));
 $app->addErrorMiddleware(true, true, true);
+
 $router = $app->getRouteCollector()->getRouteParser();
+
 $app->get('/', function ($request, $response) {
     return $response->write('Welcome to Slim!');
 });
+
 $app->get('/deploy', function ($request, $response) {
     return $response->write(__DIR__ . '/../templates');
 });
@@ -41,29 +51,41 @@ $app->get('/users_redirect', function ($request, $response) {
     }
     return $response->withStatus(302);
 });
-$app->get('/courses/{id}', function ($request, $response, array $args) {
+$app->get('/course/{id}', function ($request, $response, array $args) {
     $id = htmlspecialchars($args['id']);
-    return $response->write("Course id: {$id}");
+    $params = [
+        'id' => $id,
+        'name' => 'test Sasha',
+    ];
+    return $this->get('renderer')->render($response, 'user.phtml', $params);
 })->setName('course');
 
-$app->get('/users', function ($request, $response) use ($router) {
+$app->get('/users[/{id:[0-9]+}]', function ($request, $response, array $args) use ($router) {
     $pathDB = 'db/users.json';
     $users = parse($pathDB);
     $usersData = get_object_vars($users);
     $term = $request->getQueryParam('term', null);
     $message = $term === '' ? 'Type something' : '';
+    print_r($this->get('flash')->getFirstMessage('success'));
     $users = array_map(function ($user) {
         return ['name' => $user->name, 'email' => $user->email];
     }, $usersData);
     $filteredUsers = array_filter($users, function ($user) use ($term) {
-        return mb_substr($user['name'], 0, mb_strlen($term)) === (string) $term;
+        return mb_substr(mb_strtolower($user['name']), 0, mb_strlen($term)) === (string) mb_strtolower($term);
     });
+    $id = isset($args['id']) ? $args['id'] : null;
     $params = [
         'users' => $filteredUsers,
         'term' => $term,
         'message' => $message,
-        'routname' => $router->urlFor('course', ['id' => 200])
+        'routname' => $router,
+        'id' => $id
     ];
+    if (array_key_exists($id, $users)) {
+        return $this->get('renderer')->render($response, 'user.phtml', $params);
+    } elseif ($id !== null) {
+        return $response->write('User not find')->withStatus(404);
+    }
     return $this->get('renderer')->render($response, 'users.phtml', $params);
 })->setName('users');
 
@@ -73,7 +95,7 @@ $app->get('/users/new', function ($request, $response) use ($router) {
         'errors' => []
     ];
     return $this->get('renderer')->render($response, 'newUser.phtml', $params);
-})->setName('addUser');
+})->setName('adduser');
 
 $app->post('/users/new', function ($request, $response) use ($router) {
 
@@ -88,6 +110,7 @@ $app->post('/users/new', function ($request, $response) use ($router) {
     $errors = validate($user);
     if (count($errors) === 0) {
         write($users, $pathDB);
+        $this->get('flash')->addMessage('success', 'User ' . $user['name'] . ' successfully added');
         return $response->withRedirect($router->urlFor('users'));
     }
     $params = [

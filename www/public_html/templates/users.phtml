@@ -1,14 +1,14 @@
 {% block body %}
+<p>{{ message }}</p>
 <form action="">
     <input type="text" name="term" value="{{ term|striptags }}">
     <input type="submit" value="Find user">
 </form>
-<a href="{{ path_for('addUser') }}">Регистрация</a>
+<a href="{{url_for('adduser')}}">Регистрация</a>
+
 <ul>
-{{ message }}
     {% for user in users %}
         <li>{{ user['name']}} - {{ user['email']}}</li>
     {% endfor %}
-<li><a href='{{ routname }}'>course - 200</a></li>
 </ul>
 {% endblock %}
