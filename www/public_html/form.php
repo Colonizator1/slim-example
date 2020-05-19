@@ -2,13 +2,14 @@
 
 namespace Example\Form;
 
-// Подключение автозагрузки через composer
 function parse($filePath)
 {
     $fileContent = file_get_contents($filePath);
     $filePathParts = pathinfo($filePath);
     if ($fileContent === false) {
         throw new \Exception("Can't read file by: {$filePath}");
+    } elseif ($fileContent === '') {
+        return [];
     }
     $result = json_decode($fileContent);
     if (json_last_error() !== JSON_ERROR_NONE) {

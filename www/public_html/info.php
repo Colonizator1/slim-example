@@ -1,6 +1,6 @@
 <?php
 
-namespace Example\Info;
+namespace Example;
 
 print_r("SERVER:\n");
 print_r($_SERVER);

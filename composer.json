@@ -11,10 +11,9 @@
     ],
     "autoload": {
         "psr-4": {
-            "Example\\": "www/public_html"
+            "Example\\": "www/public_html/"
         },
         "files": [
-            "www/public_html/validator.php",
             "www/public_html/form.php"
         ]
     },

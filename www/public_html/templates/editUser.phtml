@@ -1,4 +1,5 @@
-<form method="POST" action='/users'>
+<form method="POST" action="{{ url_for('user', { 'id': user.id }) }}">
+    <input type="hidden" name="_METHOD" value="PATCH">
     <div><label for="user[name]">Name:</label><input type="text" name="user[name]" value="{{ user.name|striptags }}"></div>
     {% if errors['name'] is not empty %}
     <div>{{errors['name']}}</div>
@@ -11,5 +12,5 @@
     {% if errors['email'] is not empty %}
     <div>{{errors['email']}}</div>
     {% endif %}
-    <input type="submit" value="Add user">
+    <input type="submit" value="Ubdate">
 </form>

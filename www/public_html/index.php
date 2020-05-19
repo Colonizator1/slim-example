@@ -6,14 +6,21 @@ namespace Example;
 require __DIR__ . '/../../vendor/autoload.php';
 
 use Slim\Factory\AppFactory;
+use Slim\Middleware\MethodOverrideMiddleware;
 use DI\Container;
 use Slim\Views\Twig;
 use Slim\Views\TwigMiddleware;
-use function Example\Validator\validate;
+
 use function Example\Form\parse;
 use function Example\Form\write;
 
 session_start();
+
+// Users repository on the json file
+//$repo = new UserRepository('db/users.json');
+
+//Repo on the cookie
+$repo = new UserRepositoryCookie('users');
 // Create Container
 $container = new Container();
 AppFactory::setContainer($container);
@@ -27,6 +34,7 @@ $container->set('flash', function () {
 });
 // Create App
 $app = AppFactory::create();
+$app->add(MethodOverrideMiddleware::class);
 
 // Add Twig-View Middleware
 $app->add(TwigMiddleware::createFromContainer($app, 'renderer'));
@@ -38,8 +46,8 @@ $app->get('/', function ($request, $response) {
     return $response->write('Welcome to Slim!');
 });
 
-$app->get('/deploy', function ($request, $response) {
-    return $response->write(__DIR__ . '/../templates');
+$app->get('/thumb', function ($request, $response) {
+    return $this->get('renderer')->render($response, 'thumb.phtml');
 });
 
 $app->get('/users_redirect', function ($request, $response) {
@@ -51,72 +59,137 @@ $app->get('/users_redirect', function ($request, $response) {
     }
     return $response->withStatus(302);
 });
-$app->get('/course/{id}', function ($request, $response, array $args) {
-    $id = htmlspecialchars($args['id']);
+$app->get('/users/{id:[0-9]+}', function ($request, $response, array $args) use ($repo, $router) {
+    $id = $args['id'];
+    $user = $repo->find($id);
+    if (!$user) {
+        return $response->write('User not find')->withStatus(404);
+    }
+    $authUser = $_SESSION['_user'] ?? null;
     $params = [
-        'id' => $id,
-        'name' => 'test Sasha',
+        'authUser' => $authUser,
+        'user' => $user,
+        'id' => $id
     ];
     return $this->get('renderer')->render($response, 'user.phtml', $params);
-})->setName('course');
+})->setName('user');
 
-$app->get('/users[/{id:[0-9]+}]', function ($request, $response, array $args) use ($router) {
-    $pathDB = 'db/users.json';
-    $users = parse($pathDB);
-    $usersData = get_object_vars($users);
+$app->get('/users', function ($request, $response) use ($repo, $router) {
+    $users = get_object_vars($repo->all());
+
     $term = $request->getQueryParam('term', null);
     $message = $term === '' ? 'Type something' : '';
-    print_r($this->get('flash')->getFirstMessage('success'));
-    $users = array_map(function ($user) {
-        return ['name' => $user->name, 'email' => $user->email];
-    }, $usersData);
+    echo $this->get('flash')->getFirstMessage('success');
+
     $filteredUsers = array_filter($users, function ($user) use ($term) {
-        return mb_substr(mb_strtolower($user['name']), 0, mb_strlen($term)) === (string) mb_strtolower($term);
+        return mb_substr(mb_strtolower($user->name), 0, mb_strlen($term)) === (string) mb_strtolower($term);
     });
-    $id = isset($args['id']) ? $args['id'] : null;
+
     $params = [
         'users' => $filteredUsers,
         'term' => $term,
-        'message' => $message,
-        'routname' => $router,
-        'id' => $id
+        'message' => $message
     ];
-    if (array_key_exists($id, $users)) {
-        return $this->get('renderer')->render($response, 'user.phtml', $params);
-    } elseif ($id !== null) {
-        return $response->write('User not find')->withStatus(404);
-    }
     return $this->get('renderer')->render($response, 'users.phtml', $params);
 })->setName('users');
 
+$app->get('/users/auth', function ($request, $response) use ($repo, $router) {
+    print_r("<pre>");
+    print_r($repo->all());
+    print_r("</pre>");
+    $params = [
+        'user' => [],
+        'errors' => []
+    ];
+    return $this->get('renderer')->render($response, 'auth.phtml', $params);
+})->setName('auth');
+
+$app->post('/users/auth', function ($request, $response) use ($repo, $router) {
+    $userAuthData = $request->getParsedBodyParam('user');
+    print_r($userAuthData['email']);
+    $users = $repo->all();
+    if ($repo->auth($userAuthData['email'])) {
+        $user = $repo->auth($userAuthData['email']);
+        $_SESSION['_auth_status'] = 'ok';
+        $_SESSION['_user'] = $user;
+        $this->get('flash')->addMessage('success', 'Successfully authorized');
+        return $response->withRedirect($router->urlFor('user', ['id' => $user->id]));
+    }
+    $errors = 'User not found';
+    $params = [
+        'user' => (object) $userAuthData,
+        'errors' => $errors
+    ];
+    $response = $response->withStatus(401);
+    return $this->get('renderer')->render($response, 'auth.phtml', $params);
+});
+
 $app->get('/users/new', function ($request, $response) use ($router) {
     $params = [
-        'user' => ['name' => '','email' => ''],
+        'user' => [],
         'errors' => []
     ];
     return $this->get('renderer')->render($response, 'newUser.phtml', $params);
 })->setName('adduser');
 
-$app->post('/users/new', function ($request, $response) use ($router) {
-
-    $user = $request->getParsedBodyParam('user');
-    $pathDB = 'db/users.json';
-    $users = parse($pathDB);
-    $usersData = get_object_vars($users);
-    $lastId = array_pop(array_keys($usersData));
-    $newId = $lastId + 1;
-
-    $users->$newId = (object) ['name' => $user['name'],'email' => $user['email']];
-    $errors = validate($user);
+$app->post('/users', function ($request, $response) use ($repo, $router) {
+    $newUser = $request->getParsedBodyParam('user');
+    $validator = new Validator();
+    $errors = $validator->validate($newUser);
     if (count($errors) === 0) {
-        write($users, $pathDB);
-        $this->get('flash')->addMessage('success', 'User ' . $user['name'] . ' successfully added');
+        $repo->save((object) $newUser);
+        $this->get('flash')->addMessage('success', 'User ' . $newUser['name'] . ' successfully added');
+        return $response->withRedirect($router->urlFor('users'));
+    }
+    $params = [
+        'user' => (object) $newUser,
+        'errors' => $errors
+    ];
+    $response = $response->withStatus(422);
+    return $this->get('renderer')->render($response, 'newUser.phtml', $params);
+});
+
+$app->get('/users/{id:[0-9]+}/edit', function ($request, $response, $args) use ($repo, $router) {
+    $id = $args['id'];
+    $user = $repo->find($id);
+    $params = [
+        'user' => $user,
+        'errors' => []
+    ];
+    return $this->get('renderer')->render($response, 'editUser.phtml', $params);
+})->setName('edituser');
+
+$app->patch('/users/{id:[0-9]+}', function ($request, $response, $args) use ($repo, $router) {
+    $id = $args['id'];
+    $user = $repo->find($id);
+    $newUserData = $request->getParsedBodyParam('user');
+
+    $validator = new Validator();
+    $errors = $validator->validate($newUserData);
+
+    if (count($errors) === 0) {
+        $user->name = $newUserData['name'];
+        $user->lastname = $newUserData['lastname'];
+        $user->email = $newUserData['email'];
+
+        $repo->save($user);
+        $this->get('flash')->addMessage('success', 'User ' . $newUserData['name'] . ' successfully edited');
         return $response->withRedirect($router->urlFor('users'));
     }
     $params = [
         'user' => $user,
+        'data' => $newUserData,
         'errors' => $errors
     ];
-    return $this->get('renderer')->render($response, 'newUser.phtml', $params);
+    $response = $response->withStatus(422);
+    return $this->get('renderer')->render($response, 'editUser.phtml', $params);
 });
+
+$app->delete('/users/{id:[0-9]+}', function ($request, $response, $args) use ($repo, $router) {
+    $id = $args['id'];
+    $repo->delete($id);
+    $this->get('flash')->addMessage('success', 'User ' . $user->name . ' successfully deleted');
+    return $response->withRedirect($router->urlFor('users'));
+});
+
 $app->run();

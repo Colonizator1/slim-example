@@ -1,2 +1,23 @@
-<p>id: {{id}}</p>
-<p>name: {{users[id]['name']}}</p>
+<a href="{{ url_for('users') }}">All users</a>
+<p>id: {{user.id}}</p>
+<p>Name: {{user.name}}</p>
+<p>Last name: {{user.lastname}}</p>
+<p>Email: {{user.email}}</p>
+<a href="{{ url_for('edituser', { 'id': user.id }) }}">Edit </a><br><br>
+<a href="" id="del_user">Delete js</a><br>
+<script>
+del_user.onclick = function(event) {
+
+  let submit = confirm("Are you sure?");
+  if (submit) {
+    document.forms["delet_form"].submit();
+  }
+  return false; // prevent url change
+};
+</script>
+<form id="delet_form" method="POST" action="{{ url_for('user', { 'id': user.id }) }}">
+    <input type="hidden" name="_METHOD" value="DELETE">
+</form>
+{% if authUser.id  == user.id %}
+<p>Авторизован</p>
+{% endif %}
